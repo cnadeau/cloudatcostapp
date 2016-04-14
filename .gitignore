@@ -7,3 +7,5 @@ plugins/
 .idea
 cloudatcostapp.iml
 npm-debug.log
+.DS_STORE
+www/css

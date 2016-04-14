@@ -1,26 +1,74 @@
+'use strict';
+
 var gulp = require('gulp');
-var gutil = require('gulp-util');
 var bower = require('bower');
-var concat = require('gulp-concat');
-var sass = require('gulp-sass');
-var minifyCss = require('gulp-minify-css');
-var rename = require('gulp-rename');
+var bowerFiles = require('main-bower-files');
 var sh = require('shelljs');
+
+var loadPlugins = require('gulp-load-plugins')({
+  DEBUG: false,
+  lazy: true
+});
 
 var paths = {
   sass: ['./scss/**/*.scss']
 };
 
-gulp.task('default', ['sass']);
+// Default task that will ensure sass is called and inject all generated files + bower dependencies into index.html
+gulp.task('default', ['inject']);
+
+// inject js files into index.html
+gulp.task('inject', ['sass'], function() {
+  return gulp.src('www/index.html')
+    .pipe(loadPlugins.inject(gulp.src(bowerFiles({
+      paths: {
+        bowerrc: './.bowerrc',
+        bowerJson: './bower.json'
+      }
+    }), {
+      read: false
+    }), {
+      name: 'bower',
+      relative: true
+    }))
+    // Inject static libs before angular source files
+    .pipe(loadPlugins.inject(gulp.src(['www/js/lib/*.js'])
+      // ensure angular files order (if any)
+      .pipe(loadPlugins.angularFilesort())
+      .on('error', function(e) {
+        // Log the error
+        loadPlugins.util.log(e);
+        // call end() on pipe to continue without breaking the gulp flow
+        this.end();
+      }), {
+        name: 'static-libs',
+        relative: true
+      }))
+    .pipe(loadPlugins.inject(gulp.src(['!www/js/lib/*.js', 'www/js/**/*.js'])
+      .pipe(loadPlugins.angularFilesort())
+      .on('error', function(e) {
+        // Log the error
+        loadPlugins.util.log(e);
+        // call end() on pipe to continue without breaking the gulp flow
+        this.end();
+      }), {
+        relative: true
+      }))
+    .pipe(loadPlugins.inject(gulp.src(['www/css/**/*.min.css', 'www/css/style.css']), {
+      relative: true
+    }))
+    .pipe(gulp.dest('www'));
+});
 
 gulp.task('sass', function(done) {
-  gulp.src('./scss/ionic.app.scss')
-    .pipe(sass())
+  gulp.src('./scss/*.scss')
+    .pipe(loadPlugins.sass().on('error', loadPlugins.sass.logError))
+    .pipe(loadPlugins.concat('app.style.css'))
     .pipe(gulp.dest('./www/css/'))
-    .pipe(minifyCss({
+    .pipe(loadPlugins.minifyCss({
       keepSpecialComments: 0
     }))
-    .pipe(rename({ extname: '.min.css' }))
+    .pipe(loadPlugins.rename({ extname: '.min.css' }))
     .pipe(gulp.dest('./www/css/'))
     .on('end', done);
 });
@@ -32,17 +80,17 @@ gulp.task('watch', function() {
 gulp.task('install', ['git-check'], function() {
   return bower.commands.install()
     .on('log', function(data) {
-      gutil.log('bower', gutil.colors.cyan(data.id), data.message);
+      loadPlugins.util.log('bower', loadPlugins.util.colors.cyan(data.id), data.message);
     });
 });
 
 gulp.task('git-check', function(done) {
   if (!sh.which('git')) {
     console.log(
-      '  ' + gutil.colors.red('Git is not installed.'),
+      '  ' + loadPlugins.util.colors.red('Git is not installed.'),
       '\n  Git, the version control system, is required to download Ionic.',
-      '\n  Download git here:', gutil.colors.cyan('http://git-scm.com/downloads') + '.',
-      '\n  Once git is installed, run \'' + gutil.colors.cyan('gulp install') + '\' again.'
+      '\n  Download git here:', loadPlugins.util.colors.cyan('http://git-scm.com/downloads') + '.',
+      '\n  Once git is installed, run \'' + loadPlugins.util.colors.cyan('gulp install') + '\' again.'
     );
     process.exit(1);
   }
